@@ -91,7 +91,12 @@ class SentinelClient:
         }
 
         try:
-            response = self._session.post(token_url, data=payload)
+            # Token endpoint requires form-encoded, not JSON
+            response = self._session.post(
+                token_url,
+                data=payload,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            )
             response.raise_for_status()
 
             token_data = response.json()
