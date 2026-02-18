@@ -1,0 +1,54 @@
+# Secrets - NEVER commit these
+.env
+*.env
+.env.*
+!.env.template
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local data
+*.db
+*.sqlite
+*.sqlite3
+state/
+logs/
+
+# Chroma persistence (may contain indexed data)
+chroma/
+
+# Outputs that may contain sensitive data
+outputs/*.json
+outputs/*.log
+
+# Keep the outputs folder structure
+!outputs/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temp files
+tmpclaude-*
+*.tmp
+
+# Credentials and keys
+*.pem
+*.key
+*.crt
+credentials.json
+token.json
