@@ -22,9 +22,12 @@ This system aims to reduce mean-time-to-triage (MTTT) by providing analysts with
 | Runbook Knowledge Base | ✅ Complete | 6 detailed runbooks with KQL queries |
 | Secrets Management | ✅ Complete | `.env` file, gitignored |
 | Incident Poller | ✅ Complete | Cursor-based deduplication, structured output |
-| ChromaDB Vector Store | 🔲 Pending | Runbook embeddings |
-| Langflow RAG Pipeline | 🔲 Pending | Flow design and integration |
-| Triage Report Generation | 🔲 Pending | Output formatting |
+| ChromaDB Vector Store | ✅ Complete | Runbook embeddings via Langflow |
+| Langflow RAG Pipeline | ✅ Complete | Flow: Directory → Chroma → GPT-4o |
+| Langflow API Integration | ✅ Complete | `langflow_client.py` handles API calls |
+| Triage Report Generation | ✅ Complete | Structured JSON output with confidence scores |
+
+**Phase 1 Complete** - End-to-end pipeline working: Sentinel → Poller → Langflow → Triage Reports
 
 ---
 
@@ -73,6 +76,7 @@ soc-langflow-lab/
 ├── config.py               # Configuration loader
 ├── sentinel_client.py      # Sentinel/Log Analytics API client
 ├── incident_poller.py      # Polling with deduplication
+├── langflow_client.py      # Langflow API client for triage
 │
 ├── kb/                     # Runbook knowledge base
 │   ├── impossible_travel.md
@@ -172,7 +176,8 @@ Required variables:
 | `AZURE_CLIENT_ID` | App registration ID | Azure Portal → App registrations |
 | `AZURE_CLIENT_SECRET` | Client secret | App registrations → Certificates & secrets |
 | `LOG_ANALYTICS_WORKSPACE_ID` | Workspace ID | Log Analytics workspace → Overview |
-| `LANGFLOW_API_KEY` | Langflow API key | Langflow settings |
+| `LANGFLOW_FLOW_ID` | Flow ID for triage | Langflow UI → Flow URL or settings |
+| `LANGFLOW_API_KEY` | Langflow API key (optional) | Langflow settings |
 
 ### 5. Grant API Permissions
 
@@ -229,21 +234,33 @@ python sentinel_client.py
 
 ## Usage
 
-### Poll for Incidents (Single Run)
+### Start Langflow
+```bash
+# Set auth bypass for local dev
+$env:LANGFLOW_SKIP_AUTH_AUTO_LOGIN = "true"  # PowerShell
 
+# Run Langflow
+langflow run
+```
+
+### Poll for Incidents (No Triage)
 ```bash
 python incident_poller.py
 ```
 
-### Continuous Polling
+### Poll and Triage via Langflow
+```bash
+python incident_poller.py --triage
+```
 
-```python
-from incident_poller import IncidentPoller
-from config import load_config
+### Continuous Polling with Triage
+```bash
+python incident_poller.py --triage --continuous
+```
 
-config = load_config()
-poller = IncidentPoller(config)
-poller.run()  # Polls every 60 seconds (configurable)
+### Test Sentinel Connection
+```bash
+python sentinel_client.py
 ```
 
 ### Output Schema
@@ -284,19 +301,25 @@ Incidents are normalized to this structure for Langflow:
 - [x] Structured alert schema output
 - [x] Runbook knowledge base (6 runbooks)
 
-### Phase 2: RAG Pipeline 🔲
-- [ ] Embed runbooks into ChromaDB
-- [ ] Build Langflow RAG flow
-- [ ] Connect poller to Langflow API
-- [ ] Test retrieval accuracy
+### Phase 2: RAG Pipeline ✅
+- [x] Embed runbooks into ChromaDB (via Langflow)
+- [x] Build Langflow RAG flow (SOC Triage Agent v1)
+- [x] Connect poller to Langflow API
+- [x] Test retrieval accuracy
 
-### Phase 3: Triage Automation 🔲
-- [ ] LLM prompt engineering for triage
-- [ ] Structured triage report output
-- [ ] KQL query generation from context
-- [ ] Confidence scoring
+### Phase 3: Triage Automation ✅
+- [x] LLM prompt engineering for triage (GPT-4o, Tier 2 analyst persona)
+- [x] Structured triage report output (JSON with markdown)
+- [x] Confidence scoring
+- [ ] KQL query generation from context (future)
 
-### Phase 4: Integration 🔲
+### Phase 4: Context & Retrieval Hardening 🔲
+- [ ] Context formatter (replace Type Convert)
+- [ ] Source metadata in prompts (runbook filename)
+- [ ] Retrieval debug output (which chunks used)
+- [ ] Context budget management
+
+### Phase 5: Integration 🔲
 - [ ] Webhook/queue for real-time processing
 - [ ] Sentinel incident comments API
 - [ ] Teams/Slack notifications
