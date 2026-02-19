@@ -25,6 +25,7 @@ class LangflowConfig:
     flow_id: str = ""
     api_key: Optional[str] = None
     timeout: int = 120
+    input_component_id: str = ""  # e.g., "ChatInput-fNh27"
 
     def __post_init__(self):
         if not self.flow_id:
@@ -94,13 +95,25 @@ class LangflowClient:
         # Build the API URL
         url = f"{self.config.base_url}/api/v1/run/{self.config.flow_id}?stream=false"
 
-        # Langflow expects the input as JSON string in the "Alerts JSON" component
-        # The tweaks dict maps component names to their input values
+        alert_json = json.dumps(alert_data, indent=2)
+
+        # Use chat input type and target the ChatInput component via tweaks
+        # This ensures the embedding model is properly initialized for Chroma search
         payload = {
-            "input_value": json.dumps(alert_data, indent=2),
             "output_type": "text",
-            "input_type": "text",
+            "input_type": "chat",
         }
+
+        # If a specific input component ID is configured, use tweaks to target it
+        if self.config.input_component_id:
+            payload["tweaks"] = {
+                self.config.input_component_id: {
+                    "input_value": alert_json
+                }
+            }
+        else:
+            # Fallback: send as direct input_value
+            payload["input_value"] = alert_json
 
         try:
             response = self._session.post(
@@ -302,6 +315,7 @@ def load_langflow_config() -> LangflowConfig:
         LANGFLOW_BASE_URL: Langflow server URL (default: http://127.0.0.1:7860)
         LANGFLOW_FLOW_ID: Flow ID to run (required)
         LANGFLOW_API_KEY: API key for authentication (optional)
+        LANGFLOW_INPUT_COMPONENT_ID: Input component ID (e.g., ChatInput-fNh27)
     """
     from dotenv import load_dotenv
     load_dotenv()
@@ -312,6 +326,7 @@ def load_langflow_config() -> LangflowConfig:
         base_url=os.getenv('LANGFLOW_BASE_URL', 'http://127.0.0.1:7860'),
         flow_id=flow_id,
         api_key=os.getenv('LANGFLOW_API_KEY'),
+        input_component_id=os.getenv('LANGFLOW_INPUT_COMPONENT_ID', ''),
     )
 
 

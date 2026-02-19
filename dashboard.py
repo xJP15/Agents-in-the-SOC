@@ -75,29 +75,41 @@ def generate_html() -> str:
     reports = get_triage_reports(limit=10)
 
     # Build report cards
+    def get_field(d: dict, *keys, default=None):
+        """Get field by trying multiple key variations (snake_case, Title Case, etc.)."""
+        for key in keys:
+            if key in d:
+                return d[key]
+        return default
+
     cards_html = ""
     for report in reports:
         triage = report['triage_output']
 
         if isinstance(triage, dict):
-            # Format the structured output
-            summary = triage.get('executive_summary', [])
+            # Format the structured output (handle both snake_case and Title Case)
+            summary = get_field(triage, 'executive_summary', 'Executive Summary', default=[])
             if isinstance(summary, list):
                 summary = '<br>'.join(f"• {s}" for s in summary)
 
-            entities = triage.get('key_entities', {})
-            users = entities.get('users', [])
-            ips = entities.get('ips', [])
+            entities = get_field(triage, 'key_entities', 'Key Entities', default={})
+            users = get_field(entities, 'users', 'Users', default=[])
+            ips = get_field(entities, 'ips', 'IPs', default=[])
+            # Handle case where value is a string like "Not provided" instead of a list
+            if isinstance(users, str):
+                users = [users] if users and users.lower() != 'not provided' else []
+            if isinstance(ips, str):
+                ips = [ips] if ips and ips.lower() != 'not provided' else []
 
-            mitre = triage.get('mitre_mapping', {})
-            tactics = mitre.get('tactics', [])
-            techniques = mitre.get('techniques', [])
+            mitre = get_field(triage, 'mitre_mapping', 'MITRE Mapping', 'mitre', default={})
+            tactics = get_field(mitre, 'tactics', 'Tactics', default=[])
+            techniques = get_field(mitre, 'techniques', 'Techniques', default=[])
 
-            actions = triage.get('immediate_containment_actions', [])
+            actions = get_field(triage, 'immediate_containment_actions', 'Immediate Containment Actions', default=[])
             if isinstance(actions, list):
                 actions = '<br>'.join(f"• {a}" for a in actions)
 
-            confidence = triage.get('confidence_score', 'N/A')
+            confidence = get_field(triage, 'confidence_score', 'Confidence Score', default='N/A')
 
             triage_html = f"""
             <div class="triage-content">

@@ -251,6 +251,7 @@ class SentinelClient:
             time_filter = f'| where TimeGenerated > datetime({since_str})'
 
         # Query joins SecurityIncident with SecurityAlert to get Tactics/Techniques/Entities
+        # Uses IncidentName as unique key to avoid duplicates
         query = f"""
 SecurityIncident
 | where Status != 'Closed'
@@ -268,10 +269,19 @@ SecurityIncident
     Entities = make_set(Entities),
     Tactics = make_set(Tactics),
     Techniques = make_set(Techniques),
-    AlertIds = make_set(AlertIdStr)
-    by TimeGenerated, IncidentNumber, Title, Description, Severity,
-       Status, Classification, IncidentUrl, ProviderName,
-       CreatedTime, LastModifiedTime, IncidentName
+    AlertIds = make_set(AlertIdStr),
+    TimeGenerated = max(TimeGenerated),
+    IncidentNumber = take_any(IncidentNumber),
+    Title = take_any(Title),
+    Description = take_any(Description),
+    Severity = take_any(Severity),
+    Status = take_any(Status),
+    Classification = take_any(Classification),
+    IncidentUrl = take_any(IncidentUrl),
+    ProviderName = take_any(ProviderName),
+    CreatedTime = take_any(CreatedTime),
+    LastModifiedTime = take_any(LastModifiedTime)
+    by IncidentName
 | order by TimeGenerated desc
 """
 

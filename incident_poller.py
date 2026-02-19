@@ -23,6 +23,7 @@ class PollerState:
     last_poll_time: Optional[str] = None  # ISO format
     last_incident_time: Optional[str] = None  # Latest TimeGenerated seen
     seen_incident_ids: list[str] = field(default_factory=list)
+    seen_entity_signatures: list[str] = field(default_factory=list)  # Dedupe by users+IPs
     poll_count: int = 0
     error_count: int = 0
 
@@ -60,6 +61,35 @@ class PollerState:
         """Check if an incident has already been processed."""
         incident_id = incident.get('IncidentName') or incident.get('SystemAlertId')
         return incident_id in self.seen_incident_ids
+
+    def is_duplicate_entities(self, normalized) -> bool:
+        """Check if an incident has the same users+IPs as a previously seen one."""
+        signature = self._get_entity_signature(normalized)
+        if not signature:
+            return False  # No entities to compare, allow through
+        return signature in self.seen_entity_signatures
+
+    def _get_entity_signature(self, normalized) -> str:
+        """Generate a signature from users and IPs for deduplication."""
+        entities = normalized._extract_entities() if hasattr(normalized, '_extract_entities') else {}
+        # Deduplicate and sort users/IPs
+        users = sorted(set(entities.get('users', [])))
+        ips = sorted(set(entities.get('ips', [])))
+
+        if not users and not ips:
+            return ""
+
+        # Include alert_type to allow different attack types with same entities
+        alert_type = normalized._infer_alert_type() if hasattr(normalized, '_infer_alert_type') else 'unknown'
+        return f"{alert_type}|{','.join(users)}|{','.join(ips)}"
+
+    def add_entity_signature(self, normalized):
+        """Track entity signature to prevent duplicate triaging."""
+        signature = self._get_entity_signature(normalized)
+        if signature and signature not in self.seen_entity_signatures:
+            self.seen_entity_signatures.append(signature)
+            # Keep last 500 signatures to prevent unbounded growth
+            self.seen_entity_signatures = self.seen_entity_signatures[-500:]
 
 
 class StateManager:
@@ -405,12 +435,21 @@ class IncidentPoller:
             # Also fetch alerts if you want both
             # raw_alerts = self.client.get_security_alerts(since=since, limit=100)
 
-            # Filter out already-seen incidents
+            # Filter out already-seen incidents and duplicate entities
             new_incidents = []
+            skipped_duplicates = 0
             for raw in raw_incidents:
                 if not self.state.is_seen(raw):
                     normalized = normalize_incident(raw)
+
+                    # Skip if same users+IPs already triaged (prevents duplicate analysis)
+                    if self.state.is_duplicate_entities(normalized):
+                        skipped_duplicates += 1
+                        logger.debug(f"Skipping duplicate entities: {normalized.title}")
+                        continue
+
                     new_incidents.append(normalized)
+                    self.state.add_entity_signature(normalized)
 
                     # Invoke callback if provided
                     if self.on_new_incident:
@@ -418,6 +457,9 @@ class IncidentPoller:
                             self.on_new_incident(normalized)
                         except Exception as e:
                             logger.error(f"Callback error for incident {normalized.id}: {e}")
+
+            if skipped_duplicates > 0:
+                logger.info(f"Skipped {skipped_duplicates} incidents with duplicate entities")
 
             # Update state
             self.state.poll_count += 1
