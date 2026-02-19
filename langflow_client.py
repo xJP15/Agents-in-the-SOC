@@ -157,7 +157,20 @@ class LangflowClient:
                 error=error,
             )
         except requests.exceptions.HTTPError as e:
+            # Try to get more details from the response body
+            error_detail = ""
+            try:
+                error_body = e.response.json()
+                error_detail = error_body.get('detail', error_body.get('message', str(error_body)))
+            except Exception:
+                try:
+                    error_detail = e.response.text[:500]  # First 500 chars
+                except Exception:
+                    pass
+
             error = f"Langflow API error: {e}"
+            if error_detail:
+                error += f" - Details: {error_detail}"
             logger.error(error)
             return TriageResult(
                 incident_id=incident_id,

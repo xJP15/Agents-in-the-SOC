@@ -33,6 +33,8 @@ This system aims to reduce mean-time-to-triage (MTTT) by providing analysts with
 
 ## Architecture
 
+### System Overview
+
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │ Microsoft       │     │ Incident Poller  │     │ Langflow        │
@@ -51,6 +53,49 @@ This system aims to reduce mean-time-to-triage (MTTT) by providing analysts with
                         │ (outputs/)       │
                         └──────────────────┘
 ```
+
+### Langflow RAG Pipeline
+
+![Langflow Architecture](docs/langflow_architecture.png)
+
+**Flow Name:** SOC Triage Agent v1
+
+#### Components
+
+| Component | Type | Configuration | Purpose |
+|-----------|------|---------------|---------|
+| **Directory** | File Loader | Path: `kb/`, File Types: `md`, Depth: 0 | Load runbook markdown files |
+| **Split Text** | Text Splitter | Chunk Size: 500, Overlap: 50 | Split runbooks into retrievable chunks |
+| **Embedding Model** | OpenAI Embeddings | Model: `text-embedding-3-small` | Generate vector embeddings |
+| **Chroma DB** | Vector Store | Collection: `langflow`, Persist: `chroma/` | Store and search runbook embeddings |
+| **Alerts JSON** | Text Input | - | Receive alert JSON from API |
+| **Type Convert** | Data Converter | Output Type: Message | Convert search results to message format |
+| **Prompt Template** | Prompt Builder | Variables: `{context}`, `{alert}` | Build prompt with runbook context + alert |
+| **OpenAI** | LLM | Model: `gpt-4o`, Temp: 0.10, System: "Tier 2 SOC analyst" | Generate triage analysis |
+
+#### Connections
+
+```
+INGESTION PATH (runs once to populate vector store):
+Directory ──► Split Text ──► Chroma DB
+                               ▲
+Embedding Model ───────────────┘
+
+QUERY PATH (runs per alert):
+Alerts JSON ──┬──► Chroma DB (Search Query) ──► Search Results ──► Type Convert ──► Prompt Template (context)
+              │                                                                            │
+              └──► Prompt Template (alert) ◄───────────────────────────────────────────────┘
+                            │
+                            ▼
+                         OpenAI ──► Model Response (Output)
+```
+
+#### Key Design Decisions
+
+1. **Dual Input from Alerts JSON**: The alert text feeds both the Chroma search query AND the prompt template's `{alert}` variable
+2. **Type Convert**: Converts Chroma search results (Data type) to Message type for the prompt template
+3. **Low Temperature (0.10)**: Ensures consistent, deterministic triage outputs
+4. **Tier 2 SOC Analyst Persona**: System message instructs the LLM to act as an experienced analyst
 
 ### Data Flow
 
@@ -77,6 +122,10 @@ soc-langflow-lab/
 ├── sentinel_client.py      # Sentinel/Log Analytics API client
 ├── incident_poller.py      # Polling with deduplication
 ├── langflow_client.py      # Langflow API client for triage
+├── dashboard.py            # Web dashboard for triage reports
+│
+├── docs/                   # Documentation and diagrams
+│   └── langflow_architecture.png
 │
 ├── kb/                     # Runbook knowledge base
 │   ├── impossible_travel.md
@@ -261,6 +310,12 @@ python incident_poller.py --triage --continuous
 ### Test Sentinel Connection
 ```bash
 python sentinel_client.py
+```
+
+### Run Dashboard (for demos)
+```bash
+python dashboard.py
+# Open http://localhost:8080
 ```
 
 ### Output Schema
