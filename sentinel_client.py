@@ -233,36 +233,49 @@ class SentinelClient:
         limit: int = 100,
     ) -> list[dict]:
         """
-        Query SecurityIncident table for recent incidents.
+        Query SecurityIncident table for recent incidents with enriched data.
+
+        Joins with SecurityAlert to get Tactics, Techniques, and Entities.
 
         Args:
             since: Only return incidents created after this time.
             limit: Maximum number of incidents to return.
 
         Returns:
-            List of incident records.
+            List of incident records with enriched alert data.
         """
-        # Build KQL query
-        query_parts = [
-            "SecurityIncident",
-            "| where Status != 'Closed'",  # Focus on active incidents
-        ]
-
+        # Build time filter
+        time_filter = ""
         if since:
-            # Format datetime for KQL
             since_str = since.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-            query_parts.append(f"| where TimeGenerated > datetime({since_str})")
+            time_filter = f'| where TimeGenerated > datetime({since_str})'
 
-        query_parts.extend([
-            "| order by TimeGenerated desc",
-            f"| take {limit}",
-            "| project TimeGenerated, IncidentNumber, Title, Description, Severity,",
-            "    Status, Classification, Owner, IncidentUrl, AlertIds,",
-            "    ProviderName, CreatedTime, LastModifiedTime, IncidentName",
-        ])
+        # Query joins SecurityIncident with SecurityAlert to get Tactics/Techniques/Entities
+        query = f"""
+SecurityIncident
+| where Status != 'Closed'
+{time_filter}
+| order by TimeGenerated desc
+| take {limit}
+| mv-expand AlertId = AlertIds
+| extend AlertIdStr = tostring(AlertId)
+| join kind=leftouter (
+    SecurityAlert
+    | extend AlertIdStr = tostring(SystemAlertId)
+    | project AlertIdStr, Entities, Tactics, Techniques
+) on AlertIdStr
+| summarize
+    Entities = make_set(Entities),
+    Tactics = make_set(Tactics),
+    Techniques = make_set(Techniques),
+    AlertIds = make_set(AlertIdStr)
+    by TimeGenerated, IncidentNumber, Title, Description, Severity,
+       Status, Classification, IncidentUrl, ProviderName,
+       CreatedTime, LastModifiedTime, IncidentName
+| order by TimeGenerated desc
+"""
 
-        query = "\n".join(query_parts)
-        logger.debug(f"Executing query: {query}")
+        logger.debug(f"Executing enriched incident query")
 
         return self.execute_query(query)
 

@@ -242,34 +242,58 @@ def normalize_incident(raw: dict) -> NormalizedIncident:
     title = raw.get('Title') or raw.get('AlertName') or 'Untitled'
     severity = raw.get('Severity') or raw.get('AlertSeverity') or 'Unknown'
 
-    # Parse entities if present (usually JSON string)
+    # Parse entities - may be double-encoded JSON from make_set()
     entities = []
     entities_raw = raw.get('Entities')
     if entities_raw:
-        try:
-            if isinstance(entities_raw, str):
-                entities = json.loads(entities_raw)
-            elif isinstance(entities_raw, list):
-                entities = entities_raw
-        except json.JSONDecodeError:
-            pass
+        def parse_entities_recursive(data):
+            """Recursively parse potentially nested JSON strings."""
+            result = []
+            if isinstance(data, str):
+                try:
+                    parsed = json.loads(data)
+                    result.extend(parse_entities_recursive(parsed))
+                except json.JSONDecodeError:
+                    pass
+            elif isinstance(data, list):
+                for item in data:
+                    result.extend(parse_entities_recursive(item))
+            elif isinstance(data, dict):
+                result.append(data)
+            return result
 
-    # Parse tactics/techniques
+        entities = parse_entities_recursive(entities_raw)
+
+    # Parse tactics - may be double-encoded JSON from make_set()
+    def parse_string_list(data):
+        """Parse potentially nested JSON strings into flat list."""
+        result = []
+        if isinstance(data, str):
+            try:
+                parsed = json.loads(data)
+                result.extend(parse_string_list(parsed))
+            except json.JSONDecodeError:
+                # Plain string, might be comma-separated
+                result.extend([t.strip() for t in data.split(',') if t.strip()])
+        elif isinstance(data, list):
+            for item in data:
+                result.extend(parse_string_list(item))
+        return result
+
     tactics = []
     tactics_raw = raw.get('Tactics')
     if tactics_raw:
-        if isinstance(tactics_raw, str):
-            tactics = [t.strip() for t in tactics_raw.split(',') if t.strip()]
-        elif isinstance(tactics_raw, list):
-            tactics = tactics_raw
+        tactics = parse_string_list(tactics_raw)
+    # Deduplicate while preserving order
+    tactics = list(dict.fromkeys(tactics))
 
+    # Parse techniques - may be double-encoded JSON from make_set()
     techniques = []
     techniques_raw = raw.get('Techniques')
     if techniques_raw:
-        if isinstance(techniques_raw, str):
-            techniques = [t.strip() for t in techniques_raw.split(',') if t.strip()]
-        elif isinstance(techniques_raw, list):
-            techniques = techniques_raw
+        techniques = parse_string_list(techniques_raw)
+    # Deduplicate while preserving order
+    techniques = list(dict.fromkeys(techniques))
 
     # Parse alert IDs
     alert_ids = []
