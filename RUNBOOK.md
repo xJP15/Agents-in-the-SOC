@@ -1,6 +1,6 @@
 # SOC RAG + Sentinel Integration Runbook (Langflow-based)
 
-**Version:** 0.2
+**Version:** 0.3
 **Owner:** Juan Urena
 **Last updated:** 2026-02-18
 
@@ -79,14 +79,34 @@ Sentinel SecurityIncident
 
 ## 3) Current state (what is working)
 
-- Local RAG triage flow executes successfully in Langflow UI
-- Chroma persistence works (no re-reading KB on every runtime query)
-- Retrieval validated across multiple runbooks; Top-K tuning validated
-- Sentinel integration validated:
-  - OAuth client credentials works
-  - Log Analytics API query returns SecurityIncident rows
-- Langflow can be triggered headlessly through its REST API using flow_id
-- Main gotcha resolved: Langflow API run errors due to unconfigured nodes in graph (even if unconnected)
+### 3.1 Langflow RAG Pipeline - WORKING
+- Flow: "SOC Triage Agent v1" fully functional
+- Directory → Split Text (chunk 500, overlap 50) → Chroma DB (collection: "langflow")
+- Embedding Model: OpenAI text-embedding-3-small
+- Alerts JSON → Chroma Search → Type Convert → Prompt Template → GPT-4o (temp 0.10)
+- System prompt: Tier 2 SOC analyst persona
+- Tested with JSON alerts, produces quality triage output
+
+### 3.2 Sentinel Integration - WORKING
+- OAuth client credentials flow working
+- Token caching with auto-refresh implemented
+- Log Analytics API queries return SecurityIncident rows
+- Incident poller with deduplication and state management working
+- Alert type inference maps incidents to runbook categories
+
+### 3.3 Poller → Langflow Integration - WORKING
+- `langflow_client.py` handles API communication
+- Poller sends normalized incidents to Langflow via REST API
+- Triage outputs saved to `outputs/` as markdown files
+- Structured JSON triage reports with confidence scores
+
+### 3.4 Resolved Issues
+- Fixed: Azure token endpoint Content-Type header (was sending JSON, needed form-urlencoded)
+- Fixed: Langflow API run errors due to unconfigured nodes in graph
+- Fixed: Langflow API response parsing (needed TextOutput component in flow)
+
+### 3.5 Phase 1 Status: COMPLETE
+End-to-end pipeline working: Sentinel → Poller → Langflow RAG → GPT-4o → Triage Report
 
 ---
 
@@ -121,7 +141,7 @@ Langflow is installed separately in the venv.
 C:\Users\Jpure\soc-langflow-lab\
   kb\                   # runbooks (.md)
   chroma\               # Chroma persistence (vector DB)
-  outputs\              # triage outputs / logs
+  outputs\              # triage outputs (markdown reports)
   state\                # poller cursor (dedup state)
   venv\                 # Python virtual environment
   .env                  # secrets (NEVER commit)
@@ -130,6 +150,7 @@ C:\Users\Jpure\soc-langflow-lab\
   config.py             # Configuration loader with validation
   sentinel_client.py    # Sentinel API client
   incident_poller.py    # Poller with deduplication and normalization
+  langflow_client.py    # Langflow API client for triage
   requirements.txt      # Python dependencies
 ```
 
@@ -446,7 +467,7 @@ python sentinel_client.py
 ```
 Expected output: "Connection test successful" and list of recent incidents
 
-### 14.3 Run single poll test
+### 14.3 Run poller (poll only)
 ```powershell
 python incident_poller.py
 ```
@@ -456,7 +477,21 @@ This will:
 - Normalize and display new incidents
 - Save state to `state/poller_state.json`
 
-### 14.4 Start Langflow
+### 14.4 Run poller with triage
+```powershell
+python incident_poller.py --triage
+```
+This will:
+- Poll Sentinel for new incidents
+- Send each to Langflow for RAG-based triage
+- Save triage reports to `outputs/`
+
+### 14.5 Run continuous polling with triage
+```powershell
+python incident_poller.py --triage --continuous
+```
+
+### 14.6 Start Langflow
 ```powershell
 # With venv activated
 langflow run
@@ -555,23 +590,27 @@ poller.run(max_iterations=5)  # or remove limit for infinite
 | Issue | Solution |
 |-------|----------|
 | Langflow API run fails with empty field error | Remove unconfigured nodes or set dummy values |
+| Langflow API returns empty outputs | Add TextOutput component connected to OpenAI output |
 | 403 on Langflow API (v1.5+) | Set `LANGFLOW_SKIP_AUTH_AUTO_LOGIN=true` or use API key |
-| .env not loaded in PowerShell | Load manually: `Get-Content .env \| ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2]) } }` |
+| .env not loaded in PowerShell | Load manually or restart terminal after editing |
 | KB changes not reflected | Re-run index build; Chroma doesn't auto-watch |
 | Duplicate incidents processed | Check `state/poller_state.json` for cursor issues |
 | Token expired errors | Token cache handles this; if persists, check clock sync |
 | Rate limiting (429) | Built-in retry with backoff in sentinel_client.py |
+| Azure "Malformed JSON" error | Token endpoint needs form-urlencoded, not JSON Content-Type |
 
 ---
 
 ## 18) Roadmap
 
-### Phase 1 (current): Operational integration
-- Poll Sentinel incidents automatically -> Langflow API -> triage output saved
-- Add minimal telemetry/logging in poller
-- Keep changes small, preserve working flow
+### Phase 1: Operational integration - COMPLETE
+- [x] Poll Sentinel incidents automatically
+- [x] Send to Langflow API for RAG-based triage
+- [x] Save structured triage output to `outputs/`
+- [x] Deduplication and state management
+- [x] Alert type inference for runbook matching
 
-### Phase 2: Context shaping + retrieval hardening
+### Phase 2 (current): Context shaping + retrieval hardening
 - Replace Type Convert with context formatter
 - Include source metadata (runbook file name)
 - Add context budget (max chars) and stable separators

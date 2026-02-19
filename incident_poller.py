@@ -449,7 +449,69 @@ def example_callback(incident: NormalizedIncident):
     logger.debug(f"Alert type inferred: {schema['alert_type']}")
 
 
+def langflow_triage_callback(incident: NormalizedIncident):
+    """
+    Callback that sends incidents to Langflow for RAG-based triage.
+    Saves triage results to outputs/ directory.
+    """
+    from langflow_client import (
+        LangflowClient,
+        load_langflow_config,
+        save_triage_result,
+    )
+
+    # Log the incident being processed
+    logger.info(
+        f"Triaging incident: [{incident.severity}] {incident.id} - "
+        f"{incident.title[:60]}{'...' if len(incident.title) > 60 else ''}"
+    )
+
+    try:
+        # Load Langflow config and create client
+        lf_config = load_langflow_config()
+        client = LangflowClient(lf_config)
+
+        # Get structured alert schema
+        alert_data = incident.to_alert_schema()
+
+        # Send to Langflow for triage
+        result = client.run_triage(alert_data)
+
+        if result.success:
+            # Save the triage result
+            filepath = save_triage_result(result)
+            logger.info(f"Triage complete: {filepath}")
+        else:
+            logger.error(f"Triage failed for {incident.id}: {result.error}")
+
+    except ValueError as e:
+        logger.error(f"Langflow config error: {e}")
+    except Exception as e:
+        logger.error(f"Triage error for {incident.id}: {e}")
+
+
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Poll Sentinel for incidents")
+    parser.add_argument(
+        "--triage",
+        action="store_true",
+        help="Send incidents to Langflow for triage (requires LANGFLOW_FLOW_ID in .env)",
+    )
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Run continuous polling instead of single poll",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        help="Max polling iterations (for testing)",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -460,25 +522,34 @@ if __name__ == "__main__":
         # Config __repr__ already redacts secrets
         logger.info(f"Loaded config: {config}")
 
-        # Create poller with example callback
+        # Choose callback based on --triage flag
+        if args.triage:
+            logger.info("Triage mode enabled - will send incidents to Langflow")
+            callback = langflow_triage_callback
+        else:
+            callback = example_callback
+
+        # Create poller
         poller = IncidentPoller(
             config=config,
-            on_new_incident=example_callback,
+            on_new_incident=callback,
         )
 
-        # Test single poll
-        logger.info("--- Testing single poll ---")
-        incidents = poller.poll_once()
-        logger.info(f"Retrieved {len(incidents)} new incidents")
+        if args.continuous:
+            # Run continuous polling
+            logger.info("--- Starting continuous polling ---")
+            poller.run(max_iterations=args.max_iterations)
+        else:
+            # Test single poll
+            logger.info("--- Testing single poll ---")
+            incidents = poller.poll_once()
+            logger.info(f"Retrieved {len(incidents)} new incidents")
 
-        # Show structured schema example (first incident only, if any)
-        if incidents:
-            schema = incidents[0].to_alert_schema()
-            logger.info(f"Example alert_type: {schema['alert_type']}")
-            logger.info(f"Example entities: {list(schema.get('entities', {}).keys())}")
-
-        # Uncomment to run continuous polling:
-        # poller.run(max_iterations=5)  # Run 5 iterations for testing
+            # Show structured schema example (first incident only, if any)
+            if incidents:
+                schema = incidents[0].to_alert_schema()
+                logger.info(f"Example alert_type: {schema['alert_type']}")
+                logger.info(f"Example entities: {list(schema.get('entities', {}).keys())}")
 
     except FileNotFoundError as e:
         logger.error(f"Configuration error: {e}")

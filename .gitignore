@@ -46,6 +46,9 @@ Thumbs.db
 tmpclaude-*
 *.tmp
 
+# Claude Code config
+.claude/
+
 # Credentials and keys
 *.pem
 *.key
