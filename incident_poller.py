@@ -149,26 +149,48 @@ class NormalizedIncident:
         }
 
     def _infer_alert_type(self) -> str:
-        """Infer alert type from title/description for RAG routing."""
+        """Infer alert type from title/description/tactics/techniques for RAG routing."""
         title_lower = self.title.lower()
         desc_lower = self.description.lower()
         combined = f"{title_lower} {desc_lower}"
 
-        # Map to runbook categories
-        if any(kw in combined for kw in ['impossible travel', 'atypical', 'unfamiliar location', 'sign-in from']):
+        # Also check tactics and techniques
+        tactics_str = ' '.join(self.tactics).lower()
+        techniques_str = ' '.join(self.techniques).lower()
+
+        # Map to runbook categories - check keywords first
+        if any(kw in combined for kw in ['impossible travel', 'atypical', 'unfamiliar location', 'sign-in from', 'risky sign-in']):
             return "impossible_travel"
-        elif any(kw in combined for kw in ['mfa', 'multi-factor', 'push', 'fatigue', 'authentication attempt']):
+        elif any(kw in combined for kw in ['mfa', 'multi-factor', 'push', 'fatigue', 'authentication attempt', 'mfa bombing']):
             return "mfa_fatigue"
-        elif any(kw in combined for kw in ['oauth', 'consent', 'application consent', 'app permission']):
+        elif any(kw in combined for kw in ['oauth', 'consent', 'application consent', 'app permission', 'illicit consent']):
             return "oauth_consent_abuse"
-        elif any(kw in combined for kw in ['inbox rule', 'forwarding', 'mail rule', 'mailbox']):
+        elif any(kw in combined for kw in ['inbox rule', 'forwarding', 'mail rule', 'mailbox', 'email forwarding']):
             return "mailbox_rule_abuse"
-        elif any(kw in combined for kw in ['phish', 'malicious link', 'click', 'url', 'safe links']):
+        elif any(kw in combined for kw in ['phish', 'malicious link', 'click', 'url', 'safe links', 'credential harvest']):
             return "phishing_click"
-        elif any(kw in combined for kw in ['password spray', 'brute force', 'failed login', 'credential']):
+        elif any(kw in combined for kw in ['password spray', 'brute force', 'failed login', 'credential access', 'multiple failed']):
             return "password_spray"
-        else:
-            return "unknown"
+
+        # Fallback: check MITRE techniques
+        if 't1110' in techniques_str:  # Brute Force
+            return "password_spray"
+        elif 't1566' in techniques_str:  # Phishing
+            return "phishing_click"
+        elif 't1078' in techniques_str and 'initial' in tactics_str:  # Valid Accounts + Initial Access
+            return "impossible_travel"
+        elif 't1114' in techniques_str:  # Email Collection
+            return "mailbox_rule_abuse"
+        elif 't1528' in techniques_str:  # Steal Application Access Token
+            return "oauth_consent_abuse"
+
+        # Fallback: check tactics
+        if 'credentialaccess' in tactics_str:
+            return "password_spray"
+        elif 'initialaccess' in tactics_str:
+            return "impossible_travel"
+
+        return "unknown"
 
     def _extract_entities(self) -> dict:
         """Extract and categorize entities from the incident."""
