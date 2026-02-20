@@ -355,6 +355,7 @@ Incidents are normalized to this structure for Langflow:
 - [x] Incident polling with deduplication
 - [x] Structured alert schema output
 - [x] Runbook knowledge base (6 runbooks)
+- [x] Entity-based deduplication (skip duplicate users+IPs)
 
 ### Phase 2: RAG Pipeline ✅
 - [x] Embed runbooks into ChromaDB (via Langflow)
@@ -366,19 +367,91 @@ Incidents are normalized to this structure for Langflow:
 - [x] LLM prompt engineering for triage (GPT-4o, Tier 2 analyst persona)
 - [x] Structured triage report output (JSON with markdown)
 - [x] Confidence scoring
-- [ ] KQL query generation from context (future)
+- [x] Web dashboard for live visualization
 
-### Phase 4: Context & Retrieval Hardening 🔲
-- [ ] Context formatter (replace Type Convert)
-- [ ] Source metadata in prompts (runbook filename)
-- [ ] Retrieval debug output (which chunks used)
-- [ ] Context budget management
+### Phase 4: KQL Enrichment Agent 🔲 **← NEXT**
+- [ ] KQL query generation from incident context
+- [ ] Educational explanations (learn as you build)
+- [ ] Execute read-only queries via Log Analytics API
+- [ ] Evidence bundle generation (supporting logs + reasoning)
+- [ ] Sentinel table schema knowledge base
 
-### Phase 5: Integration 🔲
-- [ ] Webhook/queue for real-time processing
-- [ ] Sentinel incident comments API
+### Phase 5: Detection Engineering Assistant 🔲
+- [ ] False positive pattern detection
+- [ ] Detection tuning recommendations
+- [ ] MITRE coverage gap analysis
+- [ ] Runbook quality scoring
+
+### Phase 6: Multi-Agent Architecture 🔲
+- [ ] Router Agent (classify incident type)
+- [ ] Enrichment Agent (KQL gen + execution)
+- [ ] Response Advisor Agent (containment recommendations)
+- [ ] Case Manager Agent (tasks, escalation, handoff)
+
+### Phase 7: SOAR Integration 🔲
+- [ ] Guardrailed actions (suggest → approve → execute)
+- [ ] Sentinel incident comments write-back
 - [ ] Teams/Slack notifications
-- [ ] Dashboard metrics
+- [ ] Audit trail for all actions
+
+---
+
+## Vision: Multi-Agent SOC Platform
+
+The long-term vision is to evolve from a single triage tool into a **multi-agent SOC automation platform**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              ORCHESTRATOR                                   │
+│                  (routes, tracks state, enforces guardrails)                │
+└─────────────────────────────────┬───────────────────────────────────────────┘
+                                  │
+            ┌─────────────────────┼─────────────────────┐
+            ▼                     ▼                     ▼
+     ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+     │   TRIAGE    │       │ ENRICHMENT  │       │  DETECTION  │
+     │   AGENT     │       │   AGENT     │       │  ENGINEER   │
+     │             │       │             │       │    AGENT    │
+     │ • Classify  │       │ • KQL gen   │       │ • FP review │
+     │ • Retrieve  │       │ • Execute   │       │ • Tune recs │
+     │ • Analyze   │       │ • Summarize │       │ • Coverage  │
+     └─────────────┘       └─────────────┘       └─────────────┘
+            │                     │                     │
+            └─────────────────────┴─────────────────────┘
+                                  │
+                           ┌──────┴──────┐
+                           │ Tool Library │
+                           │              │
+                           │ • Sentinel   │
+                           │ • Graph API  │
+                           │ • Threat Intel│
+                           └──────────────┘
+```
+
+### Agent Responsibilities
+
+| Agent | Purpose | Key Capabilities |
+|-------|---------|------------------|
+| **Triage Agent** | Initial assessment | Classify, retrieve runbooks, produce structured summary |
+| **Enrichment Agent** | Evidence collection | Generate KQL, execute queries, build evidence bundle |
+| **Detection Engineer** | Rule optimization | FP analysis, tuning recommendations, coverage mapping |
+| **Response Advisor** | Containment planning | Recommend actions with guardrails, risk assessment |
+| **Case Manager** | Workflow coordination | Tasks, assignments, escalation, handoff summaries |
+
+### Design Principles
+
+1. **Explainability** - Every decision includes reasoning
+2. **Guardrails** - Suggest before execute, require approval for actions
+3. **Portability** - Agent contracts work across SIEM platforms
+4. **Measurement** - Track retrieval precision, confidence, analyst feedback
+
+### Future Platform Capabilities
+
+- **Automated Enrichment**: KQL generation → execution → evidence bundle
+- **Detection Engineering Loop**: FP patterns → tuning recommendations → coverage gaps
+- **Confidence-based Routing**: High confidence → fast lane, low → human review
+- **Cross-platform Support**: Sentinel, Cortex XSIAM, QRadar, Splunk
+- **Analytics Layer**: MTTT tracking, hallucination detection, regression tests
 
 ---
 
