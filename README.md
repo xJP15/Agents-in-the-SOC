@@ -142,7 +142,6 @@ Alerts JSON ──┬───────────────────�
 
 ## Short-Term Roadmap
 
-Target: 4-6 weeks
 
 - Strict JSON schema enforcement + output validator
 - Verifier LLM gate (hallucination detection)
