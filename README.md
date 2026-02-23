@@ -284,6 +284,10 @@ python dashboard.py  # http://localhost:8080
 
 ---
 
+## Building in Public
+
+This project is evolving. The architecture, outputs, and tooling are actively being refined based on real-world SOC workflows. Contributions, feedback, and discussions are welcome.
+
 ## Contributing
 
 1. Fork the repository
