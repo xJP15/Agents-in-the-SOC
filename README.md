@@ -6,7 +6,7 @@
 
 A retrieval-augmented triage system that ingests Microsoft Sentinel alerts, retrieves relevant runbook context from a vector database, and produces structured triage reports via LLM. Built on Langflow with ChromaDB for runbook embeddings and GPT-4o for analysis.
 
-The system outputs deterministic, schema-valid JSON triage reports designed for analyst review and downstream automation.
+The system outputs JSON triage reports designed for analyst review and downstream automation. Strict schema enforcement is in progress.
 
 ## Why This Matters
 
@@ -35,7 +35,13 @@ Security Operations Centers face alert fatigue and inconsistent triage quality. 
 
 - Strict JSON schema enforcement for all outputs
 - Output normalization
-- Sentinel-specific KQL query generation (read-only)
+
+**Planned:**
+
+- Verifier LLM gate (hallucination/citation checks)
+- Citation grounding (link to source runbooks)
+- KQL enrichment agent (read-only queries)
+- Evaluation harness (sample alerts + scoring)
 
 **Triage Output Schema:**
 
@@ -209,14 +215,15 @@ Agents-in-the-SOC/
 
 ### Runbooks
 
-| Runbook | Alert Types Covered |
-|---------|-------------------|
-| `impossible_travel.md` | Atypical sign-in, geo anomaly, risky sign-in |
-| `mfa_fatigue.md` | Push bombing, MFA spam, authentication fatigue |
-| `oauth_consent_abuse.md` | Malicious app consent, illicit consent grant |
-| `mailbox_rule_abuse.md` | Inbox forwarding, mail rules, BEC indicators |
-| `phishing_click.md` | Safe Links clicks, credential harvesting |
-| `password_spray.md` | Brute force, credential stuffing |
+**v1 Hardening Focus:**
+- `password_spray.md` - Brute force, credential stuffing
+- `mailbox_rule_abuse.md` - Inbox forwarding, mail rules, BEC indicators
+- `oauth_consent_abuse.md` - Malicious app consent, illicit consent grant
+
+**Also Available:**
+- `impossible_travel.md` - Atypical sign-in, geo anomaly, risky sign-in
+- `mfa_fatigue.md` - Push bombing, MFA spam, authentication fatigue
+- `phishing_click.md` - Safe Links clicks, credential harvesting
 
 ---
 
