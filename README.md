@@ -26,13 +26,13 @@ Security Operations Centers face alert fatigue and inconsistent triage quality. 
 - Sentinel alert ingestion via Log Analytics API (service principal auth)
 - Langflow RAG pipeline with runbook retrieval
 - ChromaDB vector store with 6 security runbooks
+- Deterministic query builder (gpt-4o-mini generates 3-6 word search queries)
 - MITRE ATT&CK mapping per alert
 - Confidence scoring
 - Basic containment action suggestions
 
 **In Progress:**
 
-- Deterministic alert-to-retrieval query generation
 - Strict JSON schema enforcement for all outputs
 - Output normalization
 - Sentinel-specific KQL query generation (read-only)
@@ -81,20 +81,55 @@ Security Operations Centers face alert fatigue and inconsistent triage quality. 
 
 ### Langflow RAG Pipeline
 
+![Langflow Architecture](docs/langflow_architecture.png)
+
+**KB Ingestion Path** (runs once):
+```
+Directory (kb/) → Split Text → Embedding Model → Chroma DB
+```
+
+**Runtime Path** (per alert):
+```
+Alerts JSON ──┬────────────────────────────────────→ Triage Prompt {alert}
+              │                                              │
+              ▼                                              │
+      Query Builder Prompt                                   │
+      ("3-6 word search query")                              │
+              │                                              │
+              ▼                                              │
+      OpenAI (gpt-4o-mini)                                   │
+              │                                              │
+              ▼                                              │
+      Chroma DB (search) → Results → Type Convert → Triage Prompt {context}
+                                                             │
+                                                             ▼
+                                                     OpenAI (gpt-4o)
+                                                             │
+                                                             ▼
+                                                       Triage Output
+```
+
+### Components
+
 | Component | Type | Configuration | Purpose |
 |-----------|------|---------------|---------|
 | **Directory** | File Loader | Path: `kb/`, Depth: 0 | Load runbook markdown files |
-| **Split Text** | Text Splitter | Chunk: 500, Overlap: 50 | Split runbooks into retrievable chunks |
-| **Chroma DB** | Vector Store | Collection: `langflow` | Store and search runbook embeddings |
-| **OpenAI** | LLM | Model: `gpt-4o`, Temp: 0.10 | Generate triage analysis |
+| **Split Text** | Text Splitter | Chunk: 500, Overlap: 50 | Split runbooks into chunks |
+| **Embedding Model** | OpenAI Embeddings | `text-embedding-3-small` | Generate vector embeddings |
+| **Chroma DB** | Vector Store | Collection: `langflow` | Store and search runbooks |
+| **Query Builder** | Prompt Template | "3-6 words maximum" | Generate deterministic search query |
+| **OpenAI (QB)** | LLM | `gpt-4o-mini`, Temp: 0.10 | Fast query generation |
+| **Type Convert** | Data Converter | Output: Message | Convert search results |
+| **Triage Prompt** | Prompt Template | `{context}`, `{alert}` | Build triage prompt |
+| **OpenAI (Triage)** | LLM | `gpt-4o`, Temp: 0.10 | Generate triage analysis |
 
 ### Data Flow
 
 1. **Poll**: `incident_poller.py` queries Sentinel for `SecurityIncident` records
 2. **Normalize**: Raw incidents converted to structured alert JSON
-3. **Route**: Alert type inferred from title and MITRE techniques
-4. **Retrieve**: Langflow queries ChromaDB for relevant runbook chunks
-5. **Generate**: LLM produces triage report with recommended actions
+3. **Query Build**: Alert passed to Query Builder LLM to generate 3-6 word search query
+4. **Retrieve**: Deterministic query searches ChromaDB for relevant runbook chunks
+5. **Generate**: Triage LLM produces structured report with runbook context
 6. **Output**: Report saved to `outputs/` directory
 
 ---
