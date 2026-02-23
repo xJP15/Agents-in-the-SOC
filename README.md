@@ -25,7 +25,7 @@ Security Operations Centers face alert fatigue and inconsistent triage quality. 
 
 - Sentinel alert ingestion via Log Analytics API (service principal auth)
 - Langflow RAG pipeline with runbook retrieval
-- ChromaDB vector store with 6 security runbooks
+- ChromaDB vector store with 6 runbooks (v1 validated against: password_spray, mailbox_rule_abuse, oauth_consent_abuse)
 - Deterministic query builder (gpt-4o-mini generates 3-6 word search queries)
 - MITRE ATT&CK mapping per alert
 - Confidence scoring
@@ -138,11 +138,11 @@ Alerts JSON ──┬───────────────────�
 
 Target: 4-6 weeks
 
-- Verifier LLM gate to detect hallucinations and unsupported claims
-- Evaluation harness with curated alert test set
-- Citation enforcement linking recommendations to source runbooks
-- Triage quality metrics and scoring
-- Structured logging for all pipeline outputs
+- Strict JSON schema enforcement + output validator
+- Verifier LLM gate (hallucination detection)
+- Citation enforcement (link recommendations to source runbooks)
+- KQL enrichment agent (read-only queries) + evidence bundle
+- Evaluation harness (sample alerts + scoring)
 
 ---
 
@@ -233,12 +233,16 @@ Agents-in-the-SOC/
 ### Setup
 
 ```bash
-git clone https://github.com/yourusername/Agents-in-the-SOC.git
+git clone https://github.com/xJP15/Agents-in-the-SOC.git
 cd Agents-in-the-SOC
 
 python -m venv venv
-.\venv\Scripts\activate  # Windows
-source venv/bin/activate  # Linux/Mac
+
+# Windows
+venv\Scripts\activate
+
+# Linux/Mac
+source venv/bin/activate
 
 pip install -r requirements.txt
 cp .env.template .env
